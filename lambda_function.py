@@ -19,58 +19,65 @@ def lambda_handler(event, context):
         return generate_policy("Deny", method_arn)
 
     try:
-        verify_token(token)
-        return generate_policy("Allow", method_arn)
+        decoded_token = verify_token(token)
+
+        user_id = decoded_token.get("sub")
+        email = decoded_token.get("email")
+
+        if not user_id or not email:
+            raise JWTError("Claims 'sub' ou 'email' não encontrados no token")
+
+        policy = generate_policy("Allow", method_arn)
+        policy["context"] = {
+            "user_id": user_id,
+            "email": email
+        }
+
+        return policy
     except Exception as error:
-        print(f"Erro ao verificar token: -> {error}")
+        print(f"Erro ao verificar token: {str(error)}")
         return generate_policy("Deny", method_arn)
 
 def extract_token(headers):
     auth_header = headers.get('Authorization') or headers.get('authorization')
     if auth_header and auth_header.startswith('Bearer '):
-        return auth_header.replace('Bearer ', '')
+        return auth_header.split(' ')[1]
     return None
 
 def verify_token(token):
     public_key = get_public_key(token)
-
     key = jwk.construct(public_key)
 
-    jwt.decode(token, key, algorithms=['RS256'], issuer=COGNITO_ISSUER)
+    return jwt.decode(
+        token,
+        key,
+        algorithms=['RS256'],
+        issuer=COGNITO_ISSUER,
+        options={"verify_aud": False}
+    )
 
 def get_public_key(token):
     unverified_header = jwt.get_unverified_header(token)
     kid = unverified_header.get('kid')
-
     if not kid:
-        raise JWTError('Token inválido: cabeçalho sem `kid`.')
+        raise JWTError("Token inválido: sem 'kid' no header")
 
-    public_key = None
-    for key, value in get_keys().items():
-        if value.get('kid') == kid:
-            public_key = value
-            break
-
-    if public_key is None:
-        raise JWTError('Chave pública correspondente não encontrada')
-
-    return public_key
+    for key in get_keys().values():
+        if key.get('kid') == kid:
+            return key
+    raise JWTError("Chave pública não encontrada para o 'kid' fornecido")
 
 def get_keys():
     global cached_keys
     if cached_keys is None:
         response = requests.get(JWKS_URL)
         response.raise_for_status()
-        keys = response.json().get('keys', [])
-        cached_keys = {key['kid']: key for key in keys}
+        cached_keys = {key['kid']: key for key in response.json().get('keys', [])}
     return cached_keys
 
 def generate_policy(effect, resource):
-    if not effect or not resource:
-        raise ValueError("Efeito e recurso são obrigatórios para gerar uma política.")
-
     return {
-        "principalId": "Grant_Access_To_API",
+        "principalId": "user",
         "policyDocument": {
             "Version": "2012-10-17",
             "Statement": [{
