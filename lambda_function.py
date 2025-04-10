@@ -14,15 +14,21 @@ cached_keys = None
 def lambda_handler(event, context):
     token = extract_token(event.get('headers', {}))
     method_arn = event.get('methodArn')
+    print(f"token: {str(token)}")
+    print(f"method_arn: {str(method_arn)}")
 
     if not token:
         return generate_policy("Deny", method_arn)
 
     try:
         decoded_token = verify_token(token)
+        print(f"decoded_token: {str(decoded_token)}")
 
         user_id = decoded_token.get("sub")
         email = decoded_token.get("email")
+
+        print(f"user_id: {str(user_id)}")
+        print(f"email: {str(email)}")
 
         if not user_id or not email:
             raise JWTError("Claims 'sub' ou 'email' não encontrados no token")
@@ -46,7 +52,10 @@ def extract_token(headers):
 
 def verify_token(token):
     public_key = get_public_key(token)
+    print(f"public_key: {str(public_key)}")
+
     key = jwk.construct(public_key)
+    print(f"key: {str(key)}")
 
     return jwt.decode(
         token,
