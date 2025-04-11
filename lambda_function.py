@@ -35,8 +35,8 @@ def lambda_handler(event, context):
 
         policy = generate_policy("Allow", method_arn)
         policy["context"] = {
-            "user_id": user_id,
-            "email": email
+            "x-user-id": user_id,
+            "x-user-email": email
         }
 
         return policy
