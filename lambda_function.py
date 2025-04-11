@@ -1,4 +1,3 @@
-import json
 import requests
 import os
 from jose import jwt, JWTError
